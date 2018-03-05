@@ -74,7 +74,6 @@ if (!is_array($projects)) {
 
 //variables
 $trelloLists = array();
-$trelloLabels = array(); //we will store all label names, but not add them immediately, only when used
 $trelloAttachments = array();
 
 //create the project
@@ -131,7 +130,6 @@ function addCard($projectId, $columnId, $card)
 {
 global $trellokey;
 global $trellotoken;
-global $trelloLabels;
 global $client;
 global $userId;
 
@@ -142,20 +140,6 @@ global $userId;
 
 	$dueDate = $card->due !== null ? date('Y-m-d', strtotime($card->due)) : null;
 	
-	//Kanboard supports only one category, take the first one of the Trello labels
-	$colorId = null;
-	$categoryId = null;
-	if (count($card->labels) > 0) {
-		$trelloLabel = $card->labels[0];
-		$colorId = $trelloLabel->color;
-		if (isset($trelloLabels[$trelloLabel->id])) {
-			$categoryId = $trelloLabels[$trelloLabel->id];
-		} else {
-			$categoryId = $client->createCategory($projectId, $trelloLabel->name);
-			$trelloLabels[$trelloLabel->id] = $categoryId;
-		}
-	}
-
 	$params = array(
 		'title' => $card->name,
 		'project_id' => $projectId,
@@ -167,12 +151,11 @@ global $userId;
 	if ($dueDate !== null) {
 		$params['date_due'] = $dueDate;
 	}
-	if ($colorId !== null) {
-		$params['color_id'] = $colorId;
-	}
-	if ($categoryId !== null) {
-		$params['category_id'] = $categoryId;
-	}
+
+	$params['tags'] = array_map(function ($label) {
+		return $label->name;
+	}, $card->labels);
+
 	//TODO temporary disabled, seems to cause errors when addings tasks in later Kanboard versions >1.0.30
 	/*if ($userId !== null) {
 		$params['owner_id'] = $userId;
