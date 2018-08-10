@@ -85,6 +85,7 @@ $projectId = $client->createProject($trelloObj->name.$counter++);
 //  die("We could not create the project, perhaps it already exists?".PHP_EOL);
 }
 
+
 //remove the columns created by default
 $columns = $client->getColumns($projectId);
 foreach ($columns as $column) {
@@ -114,11 +115,11 @@ foreach ($trelloObjLists as $list) {
 
 	//add each card
 	echo 'Adding cards.' . PHP_EOL;
-        $query="https://trello.com/1/lists/".$list->id."?key=".$trellokey."&token=".$trellotoken."&cards=open&card_fields=all&card_checklists=all&members=all&member_fields=all&membersInvited=all&checklists=all&organization=true&organization_fields=all&fields=all"; // &actions=commentCard,copyCommentCard&card_attachments=true";
+        $query="https://trello.com/1/lists/".$list->id."/cards?key=".$trellokey."&token=".$trellotoken."&fields=all&members=true";
         $jsonCards = file_get_contents($query);
 	$trelloObjCards = json_decode($jsonCards);
 
-	foreach ($trelloObjCards->cards as $card) {
+	foreach ($trelloObjCards as $card) {
 		addCard($projectId, $columnId, $card);
 	}
 }
@@ -156,11 +157,20 @@ global $userId;
 		return $label->name;
 	}, $card->labels);
 
-	//TODO temporary disabled, seems to cause errors when addings tasks in later Kanboard versions >1.0.30
-	/*if ($userId !== null) {
-		$params['owner_id'] = $userId;
-	}*/
 	$taskId = $client->createTask($params);
+
+	if (!empty($card->members)) {
+		$member = reset($card->members);
+		$kanboardUser = getKanboardUserByName($member->fullName);
+		if ($kanboardUser) {
+			$params = array(
+				'id' => $taskId,
+				'owner_id' => $kanboardUser['id'],
+			);
+			$client->addProjectUser($projectId, $kanboardUser['id'], 'project-member');
+			$client->updateTask($params);
+		}
+	}
 
 	if ($card->badges->comments > 0) {
 		$jsonString = 
@@ -251,11 +261,9 @@ global $client;
 	foreach ($cardDetails as $comment) {
 		if ($comment->type === 'commentCard') {
 			$text = $comment->data->text;
-			$creatorName = trim(strtolower($comment->memberCreator->fullName));
-			$filtered_users = array_filter($users, function($u) use($creatorName) { return trim(strtolower($u['name'])) == $creatorName; });
-			if (!empty($filtered_users)) {
-				$commentUser = reset($filtered_users);
-				$commentUserId = $commentUser['id'];
+			$kanboardUser = getKanboardUserByName($comment->memberCreator->fullName);
+			if ($kanboardUser) {
+				$commentUserId = $kanboardUser['id'];
 			} else {
 				$commentUserId = $userId;
 			}
@@ -264,3 +272,20 @@ global $client;
 	}
 }
 
+function getKanboardUserByName($name)
+{
+	global $userId;
+	global $users;
+	global $client;
+
+	$name = trim(strtolower($name));
+	$filtered_users = array_filter($users, function($u) use($name) {
+		return trim(strtolower($u['name'])) == $name;
+	});
+
+	if (empty($filtered_users)) {
+		return null;
+	}
+
+	return reset($filtered_users);
+}
