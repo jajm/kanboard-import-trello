@@ -246,11 +246,20 @@ $statusDone = 2;
 function addComments($cardDetails, $taskId)
 {
 global $userId;
+global $users;
 global $client;
 	foreach ($cardDetails as $comment) {
 		if ($comment->type === 'commentCard') {
 			$text = $comment->data->text;
-			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			$creatorName = trim(strtolower($comment->memberCreator->fullName));
+			$filtered_users = array_filter($users, function($u) use($creatorName) { return trim(strtolower($u['name'])) == $creatorName; });
+			if (!empty($filtered_users)) {
+				$commentUser = reset($filtered_users);
+				$commentUserId = $commentUser['id'];
+			} else {
+				$commentUserId = $userId;
+			}
+			$client->createComment(array('task_id' => $taskId, 'user_id' => $commentUserId, 'content' => $text));
 		}
 	}
 }
